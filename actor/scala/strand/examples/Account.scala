@@ -22,7 +22,7 @@ class Account(externalService: ExternalService)(using strand: Strand):
   val system = StrandSystem()
   import system.given
 
-  val account = system.spawn(Account(ExternalService()))
+  val account = system.spawn(Account(ExternalService())).block()
 
   println(account.getBalance.block())
 

@@ -39,14 +39,14 @@ class Buncher(target: ActorRef[Batch], after: FiniteDuration, maxSize: Int)(usin
 
   private def whenActive(message: Command): Unit = message match
     case Timeout =>
-      sendBatchAndIdle()
+      deliverBatch()
     case Message(msg) =>
       buffer :+= message
       if buffer.size == maxSize then
+        deliverBatch()
         timer.cancel()
-        sendBatchAndIdle()
 
-  private def sendBatchAndIdle(): Unit =
+  private def deliverBatch(): Unit =
     target.send(Batch(buffer))
     buffer = Vector.empty
     isIdle = true

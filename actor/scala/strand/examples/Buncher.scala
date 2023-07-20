@@ -13,27 +13,27 @@ class Target(using strand: Strand):
     println(s"Got batch of ${messages.size} messages: ${messages.mkString(", ")} ")
 
 //===========================================================================================
-class Buncher(target: Target, after: FiniteDuration, maxSize: Int)(using context: Strand):
-  import context.async
+class Buncher(target: Target, after: FiniteDuration, maxSize: Int)(using strand: Strand):
+  import strand.async
   private var isIdle: Boolean        = true
   private var buffer: Vector[String] = Vector.empty
   private var timer: Cancellable     = () => true
 
   def info(message: String): Future[Unit] = async:
     buffer :+= message
-    if isIdle then onIdle() else onActive()
+    if isIdle then whenIdle() else whenActive()
 
-  private def onIdle(): Unit =
-    timer = context.schedule(after):
-      sendBatchAndIdle()
+  private def whenIdle(): Unit =
+    timer = strand.schedule(after):
+      deliverBatch()
     isIdle = false
 
-  private def onActive(): Unit =
+  private def whenActive(): Unit =
     if buffer.size == maxSize then
-      sendBatchAndIdle()
+      deliverBatch()
       timer.cancel()
 
-  private def sendBatchAndIdle(): Unit =
+  private def deliverBatch(): Unit =
     target.batch(buffer)
     buffer = Vector.empty
     isIdle = true
@@ -57,7 +57,7 @@ class BuncherTest(using strand: Strand):
 
 //===========================================================================================
 @main
-def buncherApp: Unit =
+def buncherApp(): Unit =
   val system = StrandSystem()
   system.spawn(BuncherTest())
 //    StdIn.readLine()
