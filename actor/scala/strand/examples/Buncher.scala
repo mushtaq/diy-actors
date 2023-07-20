@@ -1,19 +1,19 @@
 package strand.examples
 
 import common.Cancellable
-import strand.lib.{Context, StrandSystem}
+import strand.lib.{Strand, StrandSystem}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 //===========================================================================================
-class Target(using context: Context):
-  import context.async
+class Target(using strand: Strand):
+  import strand.async
   def batch(messages: Vector[String]): Future[Unit] = async:
     println(s"Got batch of ${messages.size} messages: ${messages.mkString(", ")} ")
 
 //===========================================================================================
-class Buncher(target: Target, after: FiniteDuration, maxSize: Int)(using context: Context):
+class Buncher(target: Target, after: FiniteDuration, maxSize: Int)(using context: Strand):
   import context.async
   private var isIdle: Boolean        = true
   private var buffer: Vector[String] = Vector.empty
@@ -39,20 +39,20 @@ class Buncher(target: Target, after: FiniteDuration, maxSize: Int)(using context
     isIdle = true
 
 //===========================================================================================
-class BuncherTest(using context: Context):
-  private val target: Target   = context.spawn(Target())
-  private val buncher: Buncher = context.spawn(Buncher(target, 3.seconds, 10))
+class BuncherTest(using strand: Strand):
+  private val target: Target   = strand.spawn(Target())
+  private val buncher: Buncher = strand.spawn(Buncher(target, 3.seconds, 10))
 
   (1 to 15).foreach: x =>
     buncher.info(x.toString)
 
-  context.schedule(1.seconds):
+  strand.schedule(1.seconds):
     buncher.info("16")
 
-  context.schedule(2.seconds):
+  strand.schedule(2.seconds):
     buncher.info("17")
 
-  context.schedule(4.seconds):
+  strand.schedule(4.seconds):
     buncher.info("18")
 
 //===========================================================================================

@@ -2,12 +2,12 @@ package strand.examples
 
 import common.ExternalService
 import common.RichFuture.block
-import strand.lib.{Context, StrandSystem}
+import strand.lib.{Strand, StrandSystem}
 
 import scala.concurrent.Future
 
-class Account(externalService: ExternalService)(using context: Context):
-  import context.async
+class Account(externalService: ExternalService)(using strand: Strand):
+  import strand.async
 
   private var balance = 0
 
