@@ -24,7 +24,7 @@ object Context:
 
     override def schedule(delay: FiniteDuration)(action: => Unit): Cancellable =
       val future = executorService.schedule[Unit](() => action, delay.length, delay.unit)
-      () => future.cancel(true)
+      () => future.cancel(false)
 
     def stop(): Unit = executorService.shutdown()
 

@@ -12,16 +12,14 @@ trait Context[T]:
   def executionContext: ExecutionContext
   def schedule(delay: FiniteDuration)(action: => Unit): Cancellable
   def self: ActorRef[T]
-  def children: Set[ActorRef[_]]
   def spawn[R](actorFactory: Context[R] ?=> Actor[R]): ActorRef[R]
-  def stop(): Future[Unit]
+  def stop(): Unit
 
 object Context:
   class Impl[T](actorFactory: Context[T] ?=> Actor[T], parent: Option[Impl[_]]) extends Context[T]:
     parentContext =>
 
     private var childContexts: Set[Impl[_]] = Set.empty
-    def children: Set[ActorRef[_]]          = childContexts.map(_.self)
 
     val executorService = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
     override val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(executorService)
@@ -31,7 +29,7 @@ object Context:
 
     override def schedule(delay: FiniteDuration)(action: => Unit): Cancellable =
       val future = executorService.schedule[Unit](() => action, delay.length, delay.unit)
-      () => future.cancel(true)
+      () => future.cancel(false)
 
     def spawn[R](actorFactory: Context[R] ?=> Actor[R]): ActorRef[R] =
       val childContext = Impl[R](actorFactory, Some(parentContext))
@@ -40,19 +38,13 @@ object Context:
 
     given ExecutionContext = executionContext
 
-    def stop(): Future[Unit] =
-      Future
-        .sequence(childContexts.map(_.stop()))
-        .flatMap(* => stopSelf())
-
-    private def stopSelf(): Future[Unit] =
+    def stop(): Unit = Future:
+      childContexts.foreach(_.stop())
       executorService.shutdown()
-      parent match
-        case Some(p) => p.remove(this)
-        case None    => Future.unit
+      parent.foreach(_.remove(this))
 
-    private def remove(child: Impl[_]): Future[Unit] =
-      Future(childContexts -= child)
+    private def remove(child: Impl[_]): Unit = Future:
+      childContexts -= child
 
 //-----------------------------------------------------------------------------------------
 trait Actor[T](using protected val context: Context[T]):
@@ -79,7 +71,7 @@ class ActorSystem:
     Future:
       rootContext.spawn(actorFactory)
 
-  def stop(): Future[Unit] =
+  def stop(): Unit =
     rootContext.stop()
 
 //-----------------------------------------------------------------------------------------
@@ -147,4 +139,4 @@ def run2(): Unit =
       val actorRef = actorSystem.spawn(new AccountActor).block()
       actorRef.send(Deposit(1)).block()
 
-  actorSystem.stop().block()
+  actorSystem.stop()

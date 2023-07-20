@@ -9,7 +9,6 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 trait ActorRef[T]:
   def send(message: T): Future[Unit]
   def ask[R](f: Promise[R] => T): Future[R]
-  def stop(): Future[Unit]
 
 //-----------------------------------------------------------------------------------------
 object ActorRef:
@@ -22,61 +21,50 @@ object ActorRef:
       send(f(p))
       p.future
 
-    def stop(): Future[Unit] = context.stop()
-
 //===========================================================================================
 abstract class Actor[T](using protected val context: Context[T]):
   given ExecutionContext = context.executionContext
   def receive(message: T): Unit
 
 //===========================================================================================
-trait Context[A]:
+trait Context[T]:
   def executionContext: ExecutionContext
-  def spawn[T](actorFactory: Context[T] ?=> Actor[T]): ActorRef[T]
+  def spawn[R](actorFactory: Context[R] ?=> Actor[R]): ActorRef[R]
   def schedule(delay: FiniteDuration)(action: => Unit): Cancellable
-  def self: ActorRef[A]
-  def children: Set[ActorRef[_]]
-  def stop(): Future[Unit]
+  def self: ActorRef[T]
+  def stop(): Unit
 
 //-----------------------------------------------------------------------------------------
 object Context:
-  class Impl[A](actorFactory: Context[A] ?=> Actor[A], parent: Option[Impl[_]]) extends Context[A]:
+  class Impl[T](actorFactory: Context[T] ?=> Actor[T], parent: Option[Impl[_]]) extends Context[T]:
     parentContext =>
 
     private var childContexts: Set[Impl[_]] = Set.empty
-    def children: Set[ActorRef[_]]          = childContexts.map(_.self)
 
-    //  private val strandExecutor = Executors.newScheduledThreadPool(1000, Thread.ofVirtual().factory())
-    private val strandExecutor             = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
-    val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(strandExecutor)
+    private val executorService            = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
+    val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(executorService)
 
-    private val actor: Actor[A]    = actorFactory(using parentContext)
-    override val self: ActorRef[A] = ActorRef.Impl(actor)(using parentContext)
+    private val actor: Actor[T]    = actorFactory(using parentContext)
+    override val self: ActorRef[T] = ActorRef.Impl(actor)(using parentContext)
 
     given ExecutionContext = executionContext
 
     def schedule(delay: FiniteDuration)(action: => Unit): Cancellable =
-      val future = strandExecutor.schedule[Unit](() => action, delay.length, delay.unit)
-      () => future.cancel(true)
+      val future = executorService.schedule[Unit](() => action, delay.length, delay.unit)
+      () => future.cancel(false)
 
-    def spawn[T](actorFactory: Context[T] ?=> Actor[T]): ActorRef[T] =
-      val childContext = Impl[T](actorFactory, Some(parentContext))
+    def spawn[R](actorFactory: Context[R] ?=> Actor[R]): ActorRef[R] =
+      val childContext = Impl[R](actorFactory, Some(parentContext))
       childContexts += childContext
       childContext.self
 
-    def stop(): Future[Unit] =
-      Future
-        .sequence(childContexts.map(_.stop()))
-        .flatMap(* => stopSelf())
+    def stop(): Unit = Future:
+      childContexts.foreach(_.stop())
+      executorService.shutdown()
+      parent.foreach(_.remove(this))
 
-    private def stopSelf(): Future[Unit] =
-      strandExecutor.shutdown()
-      parent match
-        case Some(p) => p.remove(this)
-        case None    => Future.unit
-
-    private def remove(child: Impl[_]): Future[Unit] =
-      Future(childContexts -= child)
+    private def remove(child: Impl[_]): Unit = Future:
+      childContexts -= child
 
 //===========================================================================================
 class ActorSystem:
@@ -90,7 +78,6 @@ class ActorSystem:
     Future:
       rootContext.spawn(actorFactory)
 
-  def stop(): Future[Unit] =
-    rootContext
-      .stop()
-      .map(_ => executorService.shutdown())
+  def stop(): Unit =
+    rootContext.stop()
+    executorService.shutdown()

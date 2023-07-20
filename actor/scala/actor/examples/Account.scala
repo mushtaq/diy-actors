@@ -1,6 +1,6 @@
 package actor.examples
 
-import actor.examples.AccountActor.{Deposit, GetBalance, Msg}
+import actor.examples.Account.{Deposit, GetBalance, Msg}
 import actor.lib.{Actor, ActorSystem, Context}
 import common.RichFuture.block
 
@@ -8,13 +8,13 @@ import scala.async.Async.*
 import scala.concurrent.{Future, Promise}
 
 //-----------------------------------------------------------------------------------------
-object AccountActor:
+object Account:
   sealed trait Msg
   case class GetBalance(response: Promise[Int])           extends Msg
   case class Deposit(value: Int, response: Promise[Unit]) extends Msg
 
 //-----------------------------------------------------------------------------------------
-class AccountActor(using Context[Msg]) extends Actor[Msg]:
+class Account(using Context[Msg]) extends Actor[Msg]:
   private var balance = 0
   override def receive(message: Msg): Unit = message match
     case GetBalance(response) =>
@@ -27,7 +27,7 @@ class AccountActor(using Context[Msg]) extends Actor[Msg]:
 @main
 def accountMain(): Unit =
   val system       = ActorSystem()
-  val accountActor = system.spawn(AccountActor()).block()
+  val accountActor = system.spawn(Account()).block()
   println(accountActor.ask(p => GetBalance(p)).block())
 
   (1 to 10000)
@@ -44,7 +44,7 @@ def lostUpdates(): Unit =
   val system = ActorSystem()
   import system.given
 
-  val accountActor = new AccountActor(using null)
+  val accountActor = new Account(using null)
 
   (1 to 10000)
     .map(* => Future(accountActor.receive(Deposit(1, Promise()))))

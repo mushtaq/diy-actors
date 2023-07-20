@@ -1,18 +1,20 @@
 package strand.examples
 
 import common.Cancellable
-import strand.lib.{Context, Strand, StrandSystem}
+import strand.lib.{Context, StrandSystem}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 //===========================================================================================
-class BuncherDestination(using Context) extends Strand:
+class Target(using context: Context):
+  import context.async
   def batch(messages: Vector[String]): Future[Unit] = async:
     println(s"Got batch of ${messages.size} messages: ${messages.mkString(", ")} ")
 
 //===========================================================================================
-class Buncher(target: BuncherDestination, after: FiniteDuration, maxSize: Int)(using Context) extends Strand:
+class Buncher(target: Target, after: FiniteDuration, maxSize: Int)(using context: Context):
+  import context.async
   private var isIdle: Boolean        = true
   private var buffer: Vector[String] = Vector.empty
   private var timer: Cancellable     = () => true
@@ -37,9 +39,9 @@ class Buncher(target: BuncherDestination, after: FiniteDuration, maxSize: Int)(u
     isIdle = true
 
 //===========================================================================================
-class BuncherTest(using Context) extends Strand:
-  private val target: BuncherDestination = context.spawn(BuncherDestination())
-  private val buncher: Buncher           = context.spawn(Buncher(target, 3.seconds, 10))
+class BuncherTest(using context: Context):
+  private val target: Target   = context.spawn(Target())
+  private val buncher: Buncher = context.spawn(Buncher(target, 3.seconds, 10))
 
   (1 to 15).foreach: x =>
     buncher.info(x.toString)

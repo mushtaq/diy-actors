@@ -8,19 +8,16 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
 //-----------------------------------------------------------------------------------------
-class Strand(using protected val context: Context):
-  import context.given
-  inline def async[T](inline x: T): Future[T]               = Async.async(x)
-  extension [T](x: Future[T]) protected inline def await: T = Async.await(x)
-
-//-----------------------------------------------------------------------------------------
 class Context private[lib] ():
+  inline def async[T](inline x: T): Future[T]     = Async.async(x)
+  extension [T](x: Future[T]) inline def await: T = Async.await(x)
+
   private var children: List[Context] = Nil
 
   private val strandExecutor = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
   given ExecutionContext     = ExecutionContext.fromExecutorService(strandExecutor)
 
-  def spawn[R <: Strand](strandFactory: Context ?=> R): R =
+  def spawn[R](strandFactory: Context ?=> R): R =
     val ctx = Context()
     Future:
       children ::= ctx
