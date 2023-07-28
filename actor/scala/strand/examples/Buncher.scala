@@ -9,17 +9,18 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
 //===========================================================================================
 class Target(using strand: Strand):
   import strand.async
-  def batch(messages: Vector[String]): Future[Unit] = async:
+  def batch(messages: Vector[String]): Unit = async:
     println(s"Got batch of ${messages.size} messages: ${messages.mkString(", ")} ")
 
 //===========================================================================================
 class Buncher(target: Target, after: FiniteDuration, maxSize: Int)(using strand: Strand):
-  import strand.async
   private var isIdle: Boolean        = true
   private var buffer: Vector[String] = Vector.empty
   private var timer: Cancellable     = () => true
 
-  def info(message: String): Future[Unit] = async:
+  import strand.async
+
+  def add(message: String): Unit = async:
     buffer :+= message
     if isIdle then whenIdle() else whenActive()
 
@@ -44,16 +45,16 @@ class BuncherTest(using strand: Strand):
   private val buncher: Buncher = strand.spawn(Buncher(target, 3.seconds, 10))
 
   (1 to 15).foreach: x =>
-    buncher.info(x.toString)
+    buncher.add(x.toString)
 
   strand.schedule(1.seconds):
-    buncher.info("16")
+    buncher.add("16")
 
   strand.schedule(2.seconds):
-    buncher.info("17")
+    buncher.add("17")
 
   strand.schedule(4.seconds):
-    buncher.info("18")
+    buncher.add("18")
 
 //===========================================================================================
 @main

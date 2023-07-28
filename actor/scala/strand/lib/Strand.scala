@@ -2,8 +2,7 @@ package strand.lib
 
 import common.Cancellable
 
-import java.util.concurrent.Executors
-import scala.async.Async
+import java.util.concurrent.{Executors, ThreadFactory}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -11,15 +10,16 @@ import scala.concurrent.{ExecutionContext, Future}
 class Strand private[lib] (parent: Option[Strand]):
   parentStrand =>
 
+  import scala.async.Async
+  given ExecutionContext                          = executionContext
   inline def async[T](inline x: T): Future[T]     = Async.async(x)
   extension [T](x: Future[T]) inline def await: T = Async.await(x)
 
+  private val threadFactory: ThreadFactory = Thread.ofVirtual().factory()
+  private val executorService              = Executors.newSingleThreadScheduledExecutor(threadFactory)
+  val executionContext: ExecutionContext   = ExecutionContext.fromExecutorService(executorService)
+
   private var childStrands: Set[Strand] = Set.empty
-
-  private val executorService            = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
-  val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(executorService)
-
-  given ExecutionContext = executionContext
 
   def schedule(delay: FiniteDuration)(action: => Unit): Cancellable =
     val future = executorService.schedule[Unit](() => action, delay.length, delay.unit)
@@ -40,8 +40,8 @@ class Strand private[lib] (parent: Option[Strand]):
 
 //===========================================================================================
 class StrandSystem:
-  private val globalExecutor = Executors.newVirtualThreadPerTaskExecutor()
-  given ExecutionContext     = ExecutionContext.fromExecutorService(globalExecutor)
+  private val globalExecutor             = Executors.newVirtualThreadPerTaskExecutor()
+  val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(globalExecutor)
 
   private val rootStrand: Strand = Strand(None)
 
