@@ -1,6 +1,6 @@
 package _1
 
-import AccountActor.*
+import Msg.*
 import common.RichFuture.block
 
 import java.util.concurrent.{ExecutorService, Executors}
@@ -22,15 +22,14 @@ trait ActorRef[T]:
   def send(message: T): Future[Unit]
 
 //-----------------------------------------------------------------------------------------
-object AccountActor:
-  sealed trait Msg
-  case class GetBalance()        extends Msg
-  case class Deposit(value: Int) extends Msg
+enum Msg:
+  case GetBalance
+  case Deposit(value: Int)
 
 class AccountActor extends Actor[Msg]:
   private var balance = 0
   override def receive(message: Msg): Unit = message match
-    case GetBalance() =>
+    case GetBalance =>
       println(balance)
     case Deposit(value) =>
       println(Thread.currentThread())
@@ -45,10 +44,11 @@ def run0(): Unit =
   val accountActor = new AccountActor()
 
   (1 to 10000)
-    .map(* => Future(accountActor.receive(Deposit(1))))
+    .map: * =>
+      Future(accountActor.receive(Deposit(1)))
     .foreach(_.block())
 
-  accountActor.receive(GetBalance())
+  accountActor.receive(GetBalance)
 
   globalExecutor.shutdown()
 
@@ -64,25 +64,16 @@ def run1(): Unit =
     .map(* => Future(actorRef.send(Deposit(1))).flatten)
     .foreach(_.block())
 
-  actorRef.send(GetBalance())
+  actorRef.send(GetBalance)
 
   globalExecutor.shutdown()
 
 @main
 //show that each Actor creates a thread
 def run2(): Unit =
-  val globalExecutor     = Executors.newFixedThreadPool(1000)
-  given ExecutionContext = ExecutionContext.fromExecutorService(globalExecutor)
-
-  (1 to 10)
-    .map: * =>
-      Future:
-        val actorRef = ActorSystem.spawn(new AccountActor)
-        actorRef.send(Deposit(1))
-      .flatten
-    .foreach(_.block())
-
-  globalExecutor.shutdown()
+  (1 to 50).foreach: * =>
+    val actorRef = ActorSystem.spawn(new AccountActor)
+    actorRef.send(Deposit(1))
 
 @main
 //show that one VT can run on multiple carrier threads (non-deterministic)

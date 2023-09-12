@@ -3,34 +3,35 @@ package strand.examples
 import common.Cancellable
 import strand.lib.{Strand, StrandSystem}
 
-import scala.concurrent.Future
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.Future
 
 //===========================================================================================
 class Target(using strand: Strand):
-  import strand.async
-  def batch(messages: Vector[String]): Unit = async:
+  import strand.given
+
+  def batch(messages: Vector[String]): Unit = Future:
     println(s"Got batch of ${messages.size} messages: ${messages.mkString(", ")} ")
 
 //===========================================================================================
-class Buncher(target: Target, after: FiniteDuration, maxSize: Int)(using strand: Strand):
+class Buncher(target: Target, timeout: FiniteDuration, batchSize: Int)(using strand: Strand):
   private var isIdle: Boolean        = true
   private var buffer: Vector[String] = Vector.empty
   private var timer: Cancellable     = () => true
 
-  import strand.async
+  import strand.given
 
-  def add(message: String): Unit = async:
+  def add(message: String): Unit = Future:
     buffer :+= message
     if isIdle then whenIdle() else whenActive()
 
   private def whenIdle(): Unit =
-    timer = strand.schedule(after):
+    timer = strand.schedule(timeout):
       deliverBatch()
     isIdle = false
 
   private def whenActive(): Unit =
-    if buffer.size == maxSize then
+    if buffer.size == batchSize then
       deliverBatch()
       timer.cancel()
 
@@ -61,5 +62,5 @@ class BuncherTest(using strand: Strand):
 def buncherApp(): Unit =
   val system = StrandSystem()
   system.spawn(BuncherTest())
-//    StdIn.readLine()
-//    system.stop()
+//  io.StdIn.readLine()
+//  system.stop()

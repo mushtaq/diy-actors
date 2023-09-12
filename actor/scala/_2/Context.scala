@@ -17,7 +17,7 @@ object Context:
     def stop(): Unit                                = executorService.shutdown()
 
 //-----------------------------------------------------------------------------------------
-trait Actor[T](using protected val context: Context):
+trait Actor[T](using val context: Context):
   def receive(message: T): Unit
 
 object ActorSystem:

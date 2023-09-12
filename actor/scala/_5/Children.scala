@@ -16,7 +16,10 @@ trait Context[T]:
   def stop(): Unit
 
 object Context:
-  class Impl[T](actorFactory: Context[T] ?=> Actor[T], parent: Option[Impl[_]]) extends Context[T]:
+  class Impl[T](
+      actorFactory: Context[T] ?=> Actor[T],
+      parent: Option[Impl[_]]
+  ) extends Context[T]:
     parentContext =>
 
     private var childContexts: Set[Impl[_]] = Set.empty

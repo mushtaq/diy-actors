@@ -1,6 +1,6 @@
 package _0
 
-import AccountActor.*
+import Msg.*
 import common.RichFuture.block
 
 import java.util.concurrent.{ExecutorService, Executors}
@@ -45,15 +45,14 @@ trait ActorRef[T]:
   def send(message: T): Future[Unit]
 
 //-----------------------------------------------------------------------------------------
-object AccountActor:
-  sealed trait Msg
-  case class GetBalance()        extends Msg
-  case class Deposit(value: Int) extends Msg
+enum Msg:
+  case GetBalance
+  case Deposit(value: Int)
 
 class AccountActor(using Context) extends Actor[Msg]:
   private var balance = 0
   override def receive(message: Msg): Unit = message match
-    case GetBalance() =>
+    case GetBalance =>
       println(balance)
     case Deposit(value) =>
 //      println(Thread.currentThread())
@@ -72,7 +71,7 @@ def run1(): Unit =
     .map(* => Future(actorRef.send(Deposit(1))).flatten)
     .foreach(_.block())
 
-  actorRef.send(GetBalance())
+  actorRef.send(GetBalance)
 
   globalExecutor.shutdown()
 

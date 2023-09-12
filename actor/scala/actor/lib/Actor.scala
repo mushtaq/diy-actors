@@ -2,7 +2,7 @@ package actor.lib
 
 import common.Cancellable
 
-import java.util.concurrent.Executors
+import java.util.concurrent.{Executors, ScheduledExecutorService}
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
@@ -37,30 +37,28 @@ trait Context[T]:
 //-----------------------------------------------------------------------------------------
 object Context:
   class Impl[T](actorFactory: Context[T] ?=> Actor[T], parent: Option[Impl[_]]) extends Context[T]:
-    parentContext =>
-
     private var childContexts: Set[Impl[_]] = Set.empty
 
-    private val executorService            = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
-    val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(executorService)
+    private val executor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
+    val executionContext: ExecutionContext = ExecutionContext.fromExecutor(executor)
 
-    private val actor: Actor[T]    = actorFactory(using parentContext)
-    override val self: ActorRef[T] = ActorRef.Impl(actor)(using parentContext)
+    private val actor: Actor[T]    = actorFactory(using this)
+    override val self: ActorRef[T] = ActorRef.Impl(actor)(using this)
 
     given ExecutionContext = executionContext
 
     def schedule(delay: FiniteDuration)(action: => Unit): Cancellable =
-      val future = executorService.schedule[Unit](() => action, delay.length, delay.unit)
+      val future = executor.schedule[Unit](() => action, delay.length, delay.unit)
       () => future.cancel(false)
 
     def spawn[R](actorFactory: Context[R] ?=> Actor[R]): ActorRef[R] =
-      val childContext = Impl[R](actorFactory, Some(parentContext))
+      val childContext = Impl[R](actorFactory, Some(this))
       childContexts += childContext
       childContext.self
 
     def stop(): Unit = Future:
       childContexts.foreach(_.stop())
-      executorService.shutdown()
+      executor.shutdown()
       parent.foreach(_.remove(this))
 
     private def remove(child: Impl[_]): Unit = Future:
@@ -71,12 +69,12 @@ class ActorSystem:
   private val executorService            = Executors.newVirtualThreadPerTaskExecutor()
   val executionContext: ExecutionContext = ExecutionContext.fromExecutorService(executorService)
 
-  private val rootContext = Context.Impl[Unit](null, None)
-  given ExecutionContext  = rootContext.executionContext
+  private val rootContext = Context.Impl(null, None)
 
   def spawn[T](actorFactory: Context[T] ?=> Actor[T]): Future[ActorRef[T]] =
-    Future:
+    Future(
       rootContext.spawn(actorFactory)
+    )(using rootContext.executionContext)
 
   def stop(): Unit =
     rootContext.stop()

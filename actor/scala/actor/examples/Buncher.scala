@@ -1,7 +1,7 @@
 package actor.examples
 
 import common.Cancellable
-import actor.examples.Buncher.{Message, Command, Timeout}
+import actor.examples.Command.*
 import actor.examples.Target.Batch
 import actor.lib.{Actor, ActorRef, ActorSystem, Context}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
@@ -16,35 +16,42 @@ class Target(using Context[Batch]) extends Actor[Batch]:
     println(s"Got batch of ${message.commands.size} messages: ${message.commands.mkString(", ")} ")
 
 //-----------------------------------------------------------------------------------------
-object Buncher:
-  sealed trait Command
-  case class Message(message: String) extends Command
-  private case object Timeout         extends Command
+enum Command:
+  case Message(msg: String)
+  private[examples] case Timeout
 
 //===========================================================================================
-class Buncher(target: ActorRef[Batch], after: FiniteDuration, maxSize: Int)(using Context[Command])
+class Buncher(
+    target: ActorRef[Batch],
+    after: FiniteDuration,
+    maxSize: Int
+)(using Context[Command])
     extends Actor[Command]:
-  private var isIdle: Boolean         = true
-  private var buffer: Vector[Command] = Vector.empty
-  private var timer: Cancellable      = () => true
 
-  override def receive(message: Command): Unit =
-    if isIdle then whenIdle(message) else whenActive(message)
+  private var isIdle             = true
+  private var buffer             = Vector.empty[Command]
+  private var timer: Cancellable = () => true
 
-  private def whenIdle(message: Command): Unit =
-    buffer :+= message
+  override def receive(cmd: Command): Unit =
+    if isIdle
+    then whenIdle(cmd)
+    else whenActive(cmd)
+
+  private def whenIdle(cmd: Command): Unit =
+    buffer :+= cmd
     timer = context.schedule(after):
       context.self.send(Timeout)
     isIdle = false
 
-  private def whenActive(message: Command): Unit = message match
-    case Timeout =>
-      deliverBatch()
-    case Message(msg) =>
-      buffer :+= message
-      if buffer.size == maxSize then
+  private def whenActive(cmd: Command): Unit =
+    cmd match
+      case Timeout =>
         deliverBatch()
-        timer.cancel()
+      case Message(msg) =>
+        buffer :+= cmd
+        if buffer.size == maxSize then
+          deliverBatch()
+          timer.cancel()
 
   private def deliverBatch(): Unit =
     target.send(Batch(buffer))
